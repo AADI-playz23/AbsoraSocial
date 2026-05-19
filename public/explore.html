@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Explore — AbsoraSocial</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/css/style.css"/>
+</head>
+<body>
+  <div id="app-screen" class="screen active">
+    <!-- Nav injected by common.js -->
+
+    <div class="app-layout">
+      <main class="explore-main">
+        <div id="explore-header" class="explore-header" style="display:none"></div>
+        
+        <div class="explore-trending-tags" id="trending-tags"></div>
+
+        <div class="profile-grid" id="explore-grid">
+          <div class="feed-loader" style="grid-column: 1 / -1"><div class="spinner"></div></div>
+        </div>
+        <div class="feed-loader" id="infinite-loader" style="display:none"><div class="spinner"></div></div>
+      </main>
+    </div>
+  </div>
+
+  <script src="/js/common.js"></script>
+  <script src="/js/explore.js"></script>
+</body>
+</html>

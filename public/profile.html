@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Profile — AbsoraSocial</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/css/style.css"/>
+</head>
+<body>
+  <div id="app-screen" class="screen active">
+    <!-- Nav injected by common.js -->
+
+    <div class="app-layout profile-layout">
+      <main class="profile-main">
+        <div id="profile-header-container">
+          <div class="feed-loader"><div class="spinner"></div></div>
+        </div>
+
+        <div class="profile-tabs" id="profile-tabs">
+          <button class="profile-tab active" data-tab="posts">Posts</button>
+          <button class="profile-tab" data-tab="saved" id="tab-saved" style="display:none">Saved</button>
+        </div>
+
+        <div class="profile-grid" id="profile-grid"></div>
+        <div class="empty-state" id="profile-empty" style="display:none">
+          <h3>No posts yet</h3>
+        </div>
+      </main>
+    </div>
+
+    <!-- ── EDIT PROFILE MODAL ─── -->
+    <div class="modal-overlay" id="edit-profile-modal">
+      <div class="modal ig-modal edit-modal">
+        <div class="modal-header">
+          <button class="modal-back" id="close-edit-profile">✕</button>
+          <h2 class="modal-title">Edit Profile</h2>
+          <button class="modal-share" id="save-profile-btn">Save</button>
+        </div>
+        <div class="modal-body edit-body">
+          <div class="edit-avatar-section">
+            <div id="edit-avatar-preview"></div>
+            <button class="upload-cta" id="edit-avatar-btn">Change Photo</button>
+            <input type="file" id="avatar-input" accept="image/*" hidden/>
+          </div>
+          <div class="edit-form">
+            <label>Name</label>
+            <input type="text" id="edit-name" class="auth-input"/>
+            <label>Username</label>
+            <input type="text" id="edit-username" class="auth-input"/>
+            <label>Bio</label>
+            <textarea id="edit-bio" class="auth-input" rows="3" maxlength="150"></textarea>
+            <div class="toggle-row" style="padding: 1rem 0;">
+              <span>Private Account</span>
+              <div class="toggle-label">
+                <input type="checkbox" id="edit-private"/>
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </div>
+            </div>
+            <p class="post-status" id="edit-status"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/common.js"></script>
+  <script src="/js/profile.js"></script>
+</body>
+</html>

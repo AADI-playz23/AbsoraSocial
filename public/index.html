@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AbsoraSocial — Share Moments</title>
+  <meta name="description" content="AbsoraSocial — Share photos that vanish after 7 days. No trace left behind."/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Grand+Hotel&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/css/style.css"/>
+</head>
+<body>
+  <!-- ── AUTH SCREEN ─── -->
+  <div id="auth-screen" class="screen active">
+    <div class="auth-wrap">
+      <div class="auth-hero">
+        <div class="phone-mockup">
+          <div class="phone-screen">
+            <div class="mock-post"></div>
+            <div class="mock-post"></div>
+            <div class="mock-post"></div>
+          </div>
+        </div>
+      </div>
+      <div class="auth-panel">
+        <div class="auth-box">
+          <h1 class="auth-logo">AbsoraSocial</h1>
+          <div class="auth-tabs">
+            <button class="tab-btn active" data-tab="login">Log In</button>
+            <button class="tab-btn" data-tab="register">Sign Up</button>
+          </div>
+          <div class="auth-form active" id="tab-login">
+            <input class="auth-input" id="login-email" type="email" placeholder="Email" autocomplete="email"/>
+            <input class="auth-input" id="login-password" type="password" placeholder="Password" autocomplete="current-password"/>
+            <button class="auth-btn" id="login-btn">Log In</button>
+            <p class="auth-error" id="login-error"></p>
+          </div>
+          <div class="auth-form" id="tab-register">
+            <input class="auth-input" id="reg-name" type="text" placeholder="Full name" autocomplete="name"/>
+            <input class="auth-input" id="reg-email" type="email" placeholder="Email" autocomplete="email"/>
+            <input class="auth-input" id="reg-password" type="password" placeholder="Password (6+ chars)" autocomplete="new-password"/>
+            <button class="auth-btn" id="register-btn">Sign Up</button>
+            <p class="auth-error" id="register-error"></p>
+          </div>
+          <p class="auth-sub">Posts vanish after 7 days ✦ No trace left behind</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── APP SCREEN ─── -->
+  <div id="app-screen" class="screen">
+    <!-- Nav injected by common.js -->
+
+    <!-- Stories bar -->
+    <div class="stories-bar" id="stories-bar">
+      <div class="story-add" id="story-add-btn">
+        <div class="story-avatar story-add-avatar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </div>
+        <span>Your Story</span>
+      </div>
+    </div>
+
+    <!-- Main layout -->
+    <div class="app-layout">
+      <!-- Feed -->
+      <main class="feed-container">
+        <div class="feed-tabs" id="feed-tabs">
+          <button class="feed-tab active" data-mode="all">For You</button>
+          <button class="feed-tab" data-mode="following">Following</button>
+        </div>
+        <div class="feed" id="feed">
+          <div class="feed-loader"><div class="spinner"></div></div>
+        </div>
+        <div class="feed-loader" id="infinite-loader" style="display:none"><div class="spinner"></div></div>
+      </main>
+
+      <!-- Right sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-user" id="sidebar-user">
+          <div class="sb-avatar" id="sb-avatar"></div>
+          <div class="sb-info">
+            <div class="sb-name" id="sb-name"></div>
+            <div class="sb-sub">Your profile</div>
+          </div>
+          <a class="sb-switch" id="sb-profile-link" href="#">View</a>
+        </div>
+        <div class="sidebar-suggestions" id="sidebar-suggestions">
+          <div class="sidebar-section-title">Suggested for you</div>
+        </div>
+        <div class="sidebar-section">
+          <span>About</span><a href="#">Help</a><a href="#">Privacy</a>
+        </div>
+        <p class="sidebar-copy">© 2025 AbsoraSocial.<br/>Posts deleted after 7 days.</p>
+      </aside>
+    </div>
+
+    <!-- ── UPLOAD MODAL ─── -->
+    <div class="modal-overlay" id="upload-modal">
+      <div class="modal ig-modal">
+        <div class="modal-header">
+          <button class="modal-back" id="close-upload">✕</button>
+          <h2 class="modal-title">Create new post</h2>
+          <button class="modal-share" id="post-btn">Share</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-image-side">
+            <div class="upload-zone" id="upload-zone">
+              <input type="file" id="file-input" accept="image/*" hidden/>
+              <div class="upload-placeholder" id="upload-placeholder">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <p>Drag photos here</p>
+                <button class="upload-cta" onclick="document.getElementById('file-input').click()">Select from device</button>
+              </div>
+              <img id="preview-img" class="preview-img" src="" alt="" hidden/>
+            </div>
+            <!-- Filters -->
+            <div class="filter-bar" id="filter-bar" style="display:none">
+              <button class="filter-btn active" data-filter="none">Normal</button>
+              <button class="filter-btn" data-filter="grayscale(100%)">Mono</button>
+              <button class="filter-btn" data-filter="sepia(80%)">Sepia</button>
+              <button class="filter-btn" data-filter="contrast(1.4) saturate(1.3)">Vivid</button>
+              <button class="filter-btn" data-filter="brightness(1.1) contrast(0.9)">Fade</button>
+              <button class="filter-btn" data-filter="saturate(0.5) brightness(1.1)">Muted</button>
+              <button class="filter-btn" data-filter="hue-rotate(30deg) saturate(1.2)">Warm</button>
+              <button class="filter-btn" data-filter="hue-rotate(-30deg) saturate(1.2)">Cool</button>
+            </div>
+          </div>
+          <div class="modal-details-side" id="modal-details-side">
+            <div class="modal-user-row">
+              <div class="md-avatar" id="md-avatar"></div>
+              <span class="md-name" id="md-name"></span>
+            </div>
+            <textarea id="caption-input" class="caption-input" placeholder="Write a caption… use #hashtags and @mentions" maxlength="2200"></textarea>
+            <div class="caption-count"><span id="caption-len">0</span>/2,200</div>
+            <div class="modal-divider"></div>
+            <label class="toggle-row">
+              <span>Private post</span>
+              <div class="toggle-label">
+                <input type="checkbox" id="is-private"/>
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </div>
+            </label>
+            <div class="modal-divider"></div>
+            <p class="post-status" id="post-status"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STORY VIEWER ─── -->
+    <div class="story-viewer" id="story-viewer">
+      <div class="story-viewer-inner">
+        <div class="story-progress" id="story-progress"></div>
+        <div class="story-header" id="story-header"></div>
+        <img class="story-image" id="story-image" src="" alt=""/>
+        <div class="story-text-overlay" id="story-text-overlay"></div>
+        <button class="story-nav story-nav-left" id="story-prev"></button>
+        <button class="story-nav story-nav-right" id="story-next"></button>
+        <button class="story-close" id="story-close">✕</button>
+      </div>
+    </div>
+
+    <!-- ── POST DETAIL MODAL ─── -->
+    <div class="modal-overlay" id="post-detail-modal">
+      <div class="modal post-detail">
+        <button class="modal-back post-detail-close" id="post-detail-close">✕</button>
+        <div class="post-detail-body" id="post-detail-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/common.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/feed.js"></script>
+  <script src="/js/upload.js"></script>
+  <script src="/js/stories.js"></script>
+</body>
+</html>

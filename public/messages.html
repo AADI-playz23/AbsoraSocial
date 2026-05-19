@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Messages — AbsoraSocial</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/css/style.css"/>
+</head>
+<body class="no-scroll">
+  <div id="app-screen" class="screen active">
+    <!-- Nav injected by common.js -->
+
+    <div class="messages-layout">
+      <!-- Sidebar / List -->
+      <aside class="messages-sidebar" id="messages-sidebar">
+        <div class="ms-header">
+          <h2 id="ms-username">Messages</h2>
+          <button class="ms-new-btn" id="ms-new-btn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        </div>
+        <div class="ms-list" id="ms-list">
+          <div class="feed-loader"><div class="spinner"></div></div>
+        </div>
+      </aside>
+
+      <!-- Chat View -->
+      <main class="messages-chat" id="messages-chat">
+        <div class="mc-empty" id="mc-empty">
+          <div class="mc-empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div>
+          <h3>Your Messages</h3>
+          <p>Send private photos and messages to a friend.</p>
+          <button class="auth-btn" style="width:auto;padding:0.6rem 1.2rem;margin-top:1rem" id="mc-start-btn">Send Message</button>
+        </div>
+
+        <div class="mc-active" id="mc-active" style="display:none">
+          <header class="mc-header">
+            <button class="mc-back" id="mc-back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></button>
+            <a href="#" class="mc-user-info" id="mc-user-info">
+              <!-- filled by js -->
+            </a>
+          </header>
+          <div class="mc-body" id="mc-body">
+            <!-- messages here -->
+          </div>
+          <footer class="mc-footer">
+            <div class="mc-input-wrap">
+              <button class="mc-attach" id="mc-attach-btn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></button>
+              <input type="file" id="mc-file-input" accept="image/*" hidden/>
+              <input type="text" class="mc-input" id="mc-input" placeholder="Message..." autocomplete="off"/>
+              <button class="mc-send" id="mc-send-btn" disabled>Send</button>
+            </div>
+            <div class="mc-upload-preview" id="mc-upload-preview" style="display:none">
+              <img src="" id="mc-preview-img"/>
+              <button class="mc-preview-remove" id="mc-preview-remove">✕</button>
+            </div>
+          </footer>
+        </div>
+      </main>
+    </div>
+
+    <!-- New Message Modal -->
+    <div class="modal-overlay" id="new-msg-modal">
+      <div class="modal ig-modal" style="max-width:400px;min-height:400px;display:flex;flex-direction:column">
+        <div class="modal-header">
+          <button class="modal-back" id="close-new-msg">✕</button>
+          <h2 class="modal-title">New Message</h2>
+        </div>
+        <div class="modal-body" style="flex-direction:column">
+          <div class="search-bar" style="margin:1rem">
+            <input type="text" id="new-msg-search" placeholder="Search users..."/>
+          </div>
+          <div id="new-msg-results" style="flex:1;overflow-y:auto"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/common.js"></script>
+  <script src="/js/messages.js"></script>
+</body>
+</html>
