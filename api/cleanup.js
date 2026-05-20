@@ -1,41 +1,52 @@
-// netlify/functions/cleanup.js
-const { neon } = require('@neondatabase/serverless');
-const cloudinary = require('cloudinary').v2;
+const { Pool } = require('@neondatabase/serverless');
+const DatabaseRouter = require('./utils/DatabaseRouter');
+const RateLimiter = require('./utils/RateLimiter');
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key:    process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+const pool = new Pool({ connectionString: process.env.NEON_DATABASE_URL });
 
-exports.handler = async () => {
-  const sql = neon(process.env.DATABASE_URL);
-
-  // Cleanup expired posts
-  const expiredPosts = await sql`SELECT id, cloudinary_public_id FROM posts WHERE expires_at <= NOW()`;
-  if (expiredPosts.length) {
-    const pids = expiredPosts.map(p => p.cloudinary_public_id).filter(Boolean);
-    if (pids.length) { try { await cloudinary.api.delete_resources(pids); } catch {} }
-    const ids = expiredPosts.map(p => p.id);
-    await sql`DELETE FROM posts WHERE id = ANY(${ids})`;
-    console.log(`Cleanup: deleted ${ids.length} expired posts`);
+module.exports = async (req, res) => {
+  // Rate Limiting (Strictly 1 cleanup trigger per 10 minutes per IP)
+  const ip = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.socket.remoteAddress || 'unknown';
+  if (await RateLimiter.isRateLimited(ip, 'cleanup', 1, 600)) {
+    return res.status(429).json({ error: 'Cleanup already run recently. Please try again later.' });
   }
 
-  // Cleanup expired stories
-  const expiredStories = await sql`SELECT id, cloudinary_public_id FROM stories WHERE expires_at <= NOW()`;
-  if (expiredStories.length) {
-    const sids = expiredStories.map(s => s.cloudinary_public_id).filter(Boolean);
-    if (sids.length) { try { await cloudinary.api.delete_resources(sids); } catch {} }
-    const ids = expiredStories.map(s => s.id);
-    await sql`DELETE FROM stories WHERE id = ANY(${ids})`;
-    console.log(`Cleanup: deleted ${ids.length} expired stories`);
+  try {
+    const client = await pool.connect();
+
+    // 1. Cleanup expired posts
+    const expiredPosts = await client.query('SELECT id, user_id FROM posts WHERE expires_at <= NOW()');
+    let postsCount = 0;
+    if (expiredPosts.rows.length) {
+      for (const post of expiredPosts.rows) {
+        // Delete from Sharded DB
+        await DatabaseRouter.deletePost(post.id, post.user_id).catch(() => {});
+        // Delete from Neon Global Index
+        await client.query('DELETE FROM posts WHERE id=$1', [post.id]);
+        postsCount++;
+      }
+      console.log(`Cleanup: deleted ${postsCount} expired posts`);
+    }
+
+    // 2. Cleanup expired stories
+    const expiredStories = await client.query('SELECT id FROM stories WHERE expires_at <= NOW()');
+    let storiesCount = 0;
+    if (expiredStories.rows.length) {
+      const ids = expiredStories.rows.map(s => s.id);
+      await client.query('DELETE FROM stories WHERE id = ANY($1)', [ids]);
+      storiesCount = ids.length;
+      console.log(`Cleanup: deleted ${storiesCount} expired stories`);
+    }
+
+    // 3. Cleanup old notifications (> 30 days) on Neon
+    await client.query("DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '30 days'");
+
+    client.release();
+
+    return res.status(200).json({
+      message: `Cleaned up ${postsCount} posts, ${storiesCount} stories`
+    });
+  } catch (e) {
+    return res.status(500).json({ error: 'Cleanup failed: ' + e.message });
   }
-
-  // Cleanup old notifications (> 30 days)
-  await sql`DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '30 days'`;
-
-  // Cleanup old read messages (> 90 days)
-  await sql`DELETE FROM messages WHERE created_at < NOW() - INTERVAL '90 days'`;
-
-  return { statusCode: 200, body: `Cleaned up ${expiredPosts.length} posts, ${expiredStories.length} stories` };
 };

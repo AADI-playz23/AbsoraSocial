@@ -1,62 +1,83 @@
-// netlify/functions/notifications.js
-const { neon } = require('@neondatabase/serverless');
-const crypto = require('crypto');
+const { Pool } = require('@neondatabase/serverless');
+const verifyToken = require('./utils/authHelper');
+const RateLimiter = require('./utils/RateLimiter');
 
-const H = { 'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type, Authorization','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS' };
-const ok  = (code, body) => ({ statusCode: code, headers: H, body: JSON.stringify(body) });
-const err = (code, msg)  => ok(code, { error: msg });
+const pool = new Pool({ connectionString: process.env.NEON_DATABASE_URL });
 
-function verifyToken(token, secret) {
-  if (!token) return null;
-  try {
-    const [data, sig] = token.split('.');
-    const expected = crypto.createHmac('sha256', secret).update(data).digest('base64url');
-    if (sig !== expected) return null;
-    return JSON.parse(Buffer.from(data, 'base64url').toString());
-  } catch { return null; }
-}
+module.exports = async (req, res) => {
+  // CORS Headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
 
-exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return ok(200, '');
-  const DB = process.env.DATABASE_URL;
-  if (!DB) return err(500, 'DATABASE_URL not set');
-  const JWT_SECRET = DB.slice(-32);
-  const authHeader = event.headers['authorization'] || '';
-  const token = authHeader.replace('Bearer ', '').trim();
-  const user = verifyToken(token, JWT_SECRET);
-  if (!user) return err(401, 'Not logged in');
-  const sql = neon(DB);
-  const qp = event.queryStringParameters || {};
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  const user = verifyToken(req);
+  if (!user) return res.status(401).json({ error: 'Not logged in' });
+
+  // 1. IP & User Rate Limiting (Bot & Abuse Protection)
+  const ip = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.socket.remoteAddress || 'unknown';
+  if (await RateLimiter.isRateLimited(ip, 'global', 120, 60)) {
+    return res.status(429).json({ error: 'Too many requests. Please slow down.' });
+  }
+
+  const isMutating = req.method !== 'GET';
+  const limit = isMutating ? 15 : 60;
+  if (await RateLimiter.isRateLimited(user.id, `notifications:${isMutating ? 'write' : 'read'}`, limit, 60)) {
+    return res.status(429).json({ error: 'Rate limit exceeded. Please slow down.' });
+  }
+
+  const qp = req.query || {};
   const action = qp.action || '';
 
-  if (event.httpMethod === 'GET') {
-    // Get notifications
+  // ── GET ──
+  if (req.method === 'GET') {
     try {
-      const notifs = await sql`
-        SELECT n.id, n.type, n.post_id, n.comment_id, n.is_read, n.created_at,
-               u.id as actor_id, u.name as actor_name, u.username as actor_username,
-               u.avatar_url as actor_avatar, u.is_verified as actor_verified,
-               p.image_url as post_image
-        FROM notifications n
-        JOIN users u ON u.id=n.actor_id
-        LEFT JOIN posts p ON p.id=n.post_id
-        WHERE n.user_id=${user.id}
-        ORDER BY n.created_at DESC LIMIT 50`;
-      const [{count}] = await sql`SELECT COUNT(*)::int as count FROM notifications WHERE user_id=${user.id} AND is_read=false`;
-      return ok(200, { notifications: notifs, unread_count: count });
-    } catch (e) { return err(500, e.message); }
+      const client = await pool.connect();
+      const notifsRes = await client.query(
+        `SELECT n.id, n.type, n.post_id, n.comment_id, n.is_read, n.created_at,
+                u.id as actor_id, u.name as actor_name, u.username as actor_username,
+                u.avatar_url as actor_avatar, u.is_verified as actor_verified,
+                p.image_url as post_image
+         FROM notifications n
+         JOIN users u ON u.id=n.actor_id
+         LEFT JOIN posts p ON p.id=n.post_id
+         WHERE n.user_id=$1
+         ORDER BY n.created_at DESC LIMIT 50`,
+        [user.id]
+      );
+      
+      const countRes = await client.query(
+        'SELECT COUNT(*)::int as count FROM notifications WHERE user_id=$1 AND is_read=false',
+        [user.id]
+      );
+      client.release();
+
+      return res.status(200).json({
+        notifications: notifsRes.rows,
+        unread_count: countRes.rows[0].count
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
   }
 
-  if (event.httpMethod === 'POST') {
-    // Mark all as read
+  // ── POST ──
+  if (req.method === 'POST') {
     if (action === 'read') {
       try {
-        await sql`UPDATE notifications SET is_read=true WHERE user_id=${user.id} AND is_read=false`;
-        return ok(200, { ok: true });
-      } catch (e) { return err(500, e.message); }
+        const client = await pool.connect();
+        await client.query('UPDATE notifications SET is_read=true WHERE user_id=$1 AND is_read=false', [user.id]);
+        client.release();
+        return res.status(200).json({ ok: true });
+      } catch (e) {
+        return res.status(500).json({ error: e.message });
+      }
     }
-    return err(400, 'Unknown action');
+    return res.status(400).json({ error: 'Unknown action' });
   }
 
-  return err(405, 'Method not allowed');
+  return res.status(405).json({ error: 'Method not allowed' });
 };

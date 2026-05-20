@@ -52,17 +52,24 @@ document.addEventListener('DOMContentLoaded', async () => {
       let avatar_url = profileUser.avatar_url;
       if (avatarFile) {
         status.textContent = 'Uploading photo…';
-        const sigRes = await api('/api/sign-upload', { method: 'POST' });
-        const form = new FormData();
-        form.append('file', avatarFile);
-        form.append('api_key', sigRes.api_key);
-        form.append('timestamp', String(sigRes.timestamp));
-        form.append('signature', sigRes.signature);
-        form.append('folder', sigRes.folder);
-        const upRes = await fetch(`https://api.cloudinary.com/v1_1/${sigRes.cloud_name}/image/upload`, { method: 'POST', body: form });
-        if (!upRes.ok) throw new Error('Upload failed');
-        const upData = await upRes.json();
-        avatar_url = upData.secure_url;
+        
+        const uploadResult = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(avatarFile);
+          reader.onloadend = async () => {
+            try {
+              const res = await api('/api/upload', {
+                method: 'POST',
+                body: { file: reader.result }
+              });
+              resolve(res.secure_url);
+            } catch (err) {
+              reject(err);
+            }
+          };
+        });
+        
+        avatar_url = uploadResult;
       }
       
       status.textContent = 'Saving…';

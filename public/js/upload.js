@@ -84,31 +84,31 @@ document.addEventListener('DOMContentLoaded', () => {
     postBtn.disabled = true;
 
     try {
-      statusEl.textContent = 'Preparing upload…';
-      const sigRes = await api('/api/sign-upload', { method: 'POST' });
-
       statusEl.textContent = 'Uploading photo…';
-      const form = new FormData();
-      form.append('file', selectedFile);
-      form.append('api_key', sigRes.api_key);
-      form.append('timestamp', String(sigRes.timestamp));
-      form.append('signature', sigRes.signature);
-      form.append('folder', sigRes.folder);
+      
+      const reader = new FileReader();
+      reader.readAsDataURL(selectedFile);
+      reader.onloadend = async () => {
+        try {
+          const upData = await api('/api/upload', {
+            method: 'POST',
+            body: { file: reader.result }
+          });
 
-      const upRes = await fetch(`https://api.cloudinary.com/v1_1/${sigRes.cloud_name}/image/upload`, { method: 'POST', body: form });
-      if (!upRes.ok) { const e = await upRes.json().catch(() => ({})); throw new Error(e.error?.message || 'Upload failed'); }
-      const upData = await upRes.json();
+          statusEl.textContent = 'Sharing…';
+          await api('/api/posts', { method: 'POST', body: {
+            image_url: upData.secure_url,
+            caption: captionEl.value.trim(),
+            is_private: privateEl.checked,
+          }});
 
-      statusEl.textContent = 'Sharing…';
-      await api('/api/posts', { method: 'POST', body: {
-        image_url: upData.secure_url,
-        cloudinary_public_id: upData.public_id,
-        caption: captionEl.value.trim(),
-        is_private: privateEl.checked,
-      }});
-
-      statusEl.textContent = 'Posted! ✓';
-      setTimeout(() => { closeModal(); loadFeed(); }, 600);
+          statusEl.textContent = 'Posted! ✓';
+          setTimeout(() => { closeModal(); loadFeed(); }, 600);
+        } catch (err) {
+          statusEl.textContent = `Error: ${err.message}`;
+          postBtn.disabled = false;
+        }
+      };
     } catch (e) {
       statusEl.textContent = `Error: ${e.message}`;
       postBtn.disabled = false;

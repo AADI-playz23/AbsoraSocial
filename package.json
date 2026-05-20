@@ -3,9 +3,18 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@imagekit/nodejs": "^7.6.1",
     "@neondatabase/serverless": "^0.9.0",
+    "@supabase/supabase-js": "^2.106.0",
+    "@uploadcare/rest-client": "^6.18.4",
+    "@upstash/redis": "^1.38.0",
+    "ably": "^2.21.0",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.0.0",
-    "jsonwebtoken": "^9.0.0"
+    "dotenv": "^17.4.2",
+    "jsonwebtoken": "^9.0.0",
+    "mongodb": "^7.2.0",
+    "pg": "^8.21.0",
+    "pusher": "^5.3.3"
   }
 }

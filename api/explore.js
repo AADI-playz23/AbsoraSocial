@@ -1,90 +1,188 @@
-// netlify/functions/explore.js
-const { neon } = require('@neondatabase/serverless');
-const crypto = require('crypto');
+const { Pool } = require('@neondatabase/serverless');
+const verifyToken = require('./utils/authHelper');
+const DatabaseRouter = require('./utils/DatabaseRouter');
+const CacheLayer = require('./utils/CacheLayer');
+const RateLimiter = require('./utils/RateLimiter');
 
-const H = { 'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type, Authorization','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS' };
-const ok  = (code, body) => ({ statusCode: code, headers: H, body: JSON.stringify(body) });
-const err = (code, msg)  => ok(code, { error: msg });
+const pool = new Pool({ connectionString: process.env.NEON_DATABASE_URL });
 
-function verifyToken(token, secret) {
-  if (!token) return null;
-  try {
-    const [data, sig] = token.split('.');
-    const expected = crypto.createHmac('sha256', secret).update(data).digest('base64url');
-    if (sig !== expected) return null;
-    return JSON.parse(Buffer.from(data, 'base64url').toString());
-  } catch { return null; }
-}
+module.exports = async (req, res) => {
+  // CORS Headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
 
-exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return ok(200, '');
-  if (event.httpMethod !== 'GET') return err(405, 'Method not allowed');
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
 
-  const DB = process.env.DATABASE_URL;
-  if (!DB) return err(500, 'DATABASE_URL not set');
-  const JWT_SECRET = DB.slice(-32);
-  const authHeader = event.headers['authorization'] || '';
-  const token = authHeader.replace('Bearer ', '').trim();
-  const user = verifyToken(token, JWT_SECRET);
-  const sql = neon(DB);
-  const qp = event.queryStringParameters || {};
+  // 1. IP & User Rate Limiting (Bot & Abuse Protection)
+  const ip = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.socket.remoteAddress || 'unknown';
+  if (await RateLimiter.isRateLimited(ip, 'global', 120, 60)) {
+    return res.status(429).json({ error: 'Too many requests. Please slow down.' });
+  }
+
+  const user = verifyToken(req);
+  if (user) {
+    if (await RateLimiter.isRateLimited(user.id, 'explore', 60, 60)) {
+      return res.status(429).json({ error: 'Rate limit exceeded. Please slow down.' });
+    }
+  }
+
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const qp = req.query || {};
   const action = qp.action || 'trending';
-
   const uid = user ? user.id : -1;
 
-  // Trending posts (most liked recently)
+  // Trending posts (Explore Feed)
   if (action === 'trending') {
     const cursor = parseInt(qp.cursor) || 0;
     try {
-      const posts = await sql`
-        SELECT p.id, p.image_url, p.caption, p.user_id, p.created_at, p.user_name,
-               u.username, u.avatar_url, u.is_verified,
-               (SELECT COUNT(*)::int FROM likes WHERE post_id=p.id) as like_count,
-               (SELECT COUNT(*)::int FROM comments WHERE post_id=p.id) as comment_count
-        FROM posts p JOIN users u ON p.user_id=u.id
-        WHERE p.expires_at > NOW() AND p.is_archived=false AND p.is_private=false
-          AND p.user_id NOT IN (SELECT blocked_id FROM blocked_users WHERE blocker_id=${uid})
-        ORDER BY like_count DESC, p.created_at DESC
-        LIMIT 30 OFFSET ${cursor}`;
-      return ok(200, { posts, nextCursor: posts.length === 30 ? cursor + 30 : null });
-    } catch (e) { return err(500, e.message); }
+      // Use Cache Shield for the Explore Feed
+      const fetchExploreFeed = async () => {
+        const client = await pool.connect();
+        const postsRes = await client.query(
+          `SELECT p.id, p.image_url, p.caption, p.user_id, p.created_at, p.user_name
+           FROM posts p
+           WHERE p.expires_at > NOW() AND p.is_archived=false AND p.is_private=false
+           ORDER BY p.created_at DESC LIMIT 60`
+        );
+        client.release();
+        return postsRes.rows;
+      };
+
+      const rawPosts = await CacheLayer.getExploreFeed(fetchExploreFeed);
+
+      // Filter blocked users and slice/enrich for the specific request in memory
+      const client = await pool.connect();
+      const enrichedPosts = [];
+
+      // Filter blocked users
+      let filtered = rawPosts;
+      if (uid > 0) {
+        const blocksRes = await client.query('SELECT blocked_id FROM blocked_users WHERE blocker_id=$1', [uid]);
+        const blockedIds = new Set(blocksRes.rows.map(r => r.blocked_id));
+        filtered = rawPosts.filter(p => !blockedIds.has(p.user_id));
+      }
+
+      // Paginate
+      const paginated = filtered.slice(cursor, cursor + 30);
+
+      // Enrich paginated posts with sharded like counts and author metadata
+      for (const p of paginated) {
+        const authorRes = await client.query('SELECT username, avatar_url, is_verified FROM users WHERE id=$1', [p.user_id]);
+        const author = authorRes.rows[0] || { username: 'unknown', avatar_url: '', is_verified: false };
+
+        const likeCount = await CacheLayer.getPostLikesCount(p.id, async () => {
+          return await DatabaseRouter.getLikesCount(p.id, p.user_id);
+        });
+        const commentCount = await CacheLayer.getPostCommentsCount(p.id, async () => {
+          return (await DatabaseRouter.getComments(p.id, p.user_id)).length;
+        });
+
+        enrichedPosts.push({
+          ...p,
+          ...author,
+          like_count: likeCount,
+          comment_count: commentCount
+        });
+      }
+      client.release();
+
+      // Sort by like count descending (Trending sorting)
+      enrichedPosts.sort((a, b) => b.like_count - a.like_count);
+
+      return res.status(200).json({
+        posts: enrichedPosts,
+        nextCursor: filtered.length > cursor + 30 ? cursor + 30 : null
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
   }
 
   // Posts by hashtag
   if (action === 'hashtag') {
     const tag = (qp.tag || '').toLowerCase();
-    if (!tag) return err(400, 'tag required');
+    if (!tag) return res.status(400).json({ error: 'tag required' });
     try {
-      const posts = await sql`
-        SELECT p.id, p.image_url, p.caption, p.user_id, p.created_at, p.user_name,
-               u.username, u.avatar_url, u.is_verified,
-               (SELECT COUNT(*)::int FROM likes WHERE post_id=p.id) as like_count,
-               (SELECT COUNT(*)::int FROM comments WHERE post_id=p.id) as comment_count
-        FROM posts p
-        JOIN users u ON p.user_id=u.id
-        JOIN post_hashtags ph ON ph.post_id=p.id
-        JOIN hashtags h ON h.id=ph.hashtag_id
-        WHERE h.name=${tag} AND p.expires_at > NOW() AND p.is_archived=false AND p.is_private=false
-        ORDER BY p.created_at DESC LIMIT 60`;
-      const [{count}] = await sql`
-        SELECT COUNT(*)::int as count FROM post_hashtags ph
-        JOIN hashtags h ON h.id=ph.hashtag_id WHERE h.name=${tag}`;
-      return ok(200, { posts, tag, post_count: count });
-    } catch (e) { return err(500, e.message); }
+      const client = await pool.connect();
+      const postsRes = await client.query(
+        `SELECT p.id, p.image_url, p.caption, p.user_id, p.created_at, p.user_name
+         FROM posts p
+         JOIN post_hashtags ph ON ph.post_id=p.id
+         JOIN hashtags h ON h.id=ph.hashtag_id
+         WHERE h.name=$1 AND p.expires_at > NOW() AND p.is_archived=false AND p.is_private=false
+           AND p.user_id NOT IN (SELECT blocked_id FROM blocked_users WHERE blocker_id=$2)
+         ORDER BY p.created_at DESC LIMIT 60`,
+        [tag, uid]
+      );
+
+      const posts = postsRes.rows;
+      const enrichedPosts = [];
+
+      for (const p of posts) {
+        const authorRes = await client.query('SELECT username, avatar_url, is_verified FROM users WHERE id=$1', [p.user_id]);
+        const author = authorRes.rows[0] || { username: 'unknown', avatar_url: '', is_verified: false };
+
+        const likeCount = await CacheLayer.getPostLikesCount(p.id, async () => {
+          return await DatabaseRouter.getLikesCount(p.id, p.user_id);
+        });
+        const commentCount = await CacheLayer.getPostCommentsCount(p.id, async () => {
+          return (await DatabaseRouter.getComments(p.id, p.user_id)).length;
+        });
+
+        enrichedPosts.push({
+          ...p,
+          ...author,
+          like_count: likeCount,
+          comment_count: commentCount
+        });
+      }
+
+      const countRes = await client.query(
+        `SELECT COUNT(*)::int as count FROM post_hashtags ph
+         JOIN hashtags h ON h.id=ph.hashtag_id WHERE h.name=$1`,
+        [tag]
+      );
+      client.release();
+
+      return res.status(200).json({
+        posts: enrichedPosts,
+        tag,
+        post_count: countRes.rows[0].count
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
   }
 
   // Trending hashtags
   if (action === 'tags') {
     try {
-      const tags = await sql`
-        SELECT h.name, COUNT(ph.post_id)::int as post_count
-        FROM hashtags h JOIN post_hashtags ph ON ph.hashtag_id=h.id
-        JOIN posts p ON p.id=ph.post_id
-        WHERE p.expires_at > NOW() AND p.is_archived=false
-        GROUP BY h.id ORDER BY post_count DESC LIMIT 20`;
-      return ok(200, tags);
-    } catch (e) { return err(500, e.message); }
+      const fetchTrends = async () => {
+        const client = await pool.connect();
+        const tagsRes = await client.query(
+          `SELECT h.name, COUNT(ph.post_id)::int as post_count
+           FROM hashtags h JOIN post_hashtags ph ON ph.hashtag_id=h.id
+           JOIN posts p ON p.id=ph.post_id
+           WHERE p.expires_at > NOW() AND p.is_archived=false
+           GROUP BY h.id ORDER BY post_count DESC LIMIT 20`
+        );
+        client.release();
+        return tagsRes.rows;
+      };
+
+      // Shard B handles light trends metadata
+      const tags = await CacheLayer.getTrendingTags(fetchTrends);
+      return res.status(200).json(tags);
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
   }
 
-  return err(400, 'Unknown action');
+  return res.status(400).json({ error: 'Unknown action' });
 };

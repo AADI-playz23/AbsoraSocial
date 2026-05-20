@@ -210,17 +210,22 @@ async function sendMessage() {
   try {
     let image_url = null;
     if (file) {
-      const sigRes = await api('/api/sign-upload', { method: 'POST' });
-      const form = new FormData();
-      form.append('file', file);
-      form.append('api_key', sigRes.api_key);
-      form.append('timestamp', String(sigRes.timestamp));
-      form.append('signature', sigRes.signature);
-      form.append('folder', sigRes.folder);
-      const upRes = await fetch(`https://api.cloudinary.com/v1_1/${sigRes.cloud_name}/image/upload`, { method: 'POST', body: form });
-      if (!upRes.ok) throw new Error('Upload failed');
-      const upData = await upRes.json();
-      image_url = upData.secure_url;
+      const uploadResult = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onloadend = async () => {
+          try {
+            const res = await api('/api/upload', {
+              method: 'POST',
+              body: { file: reader.result }
+            });
+            resolve(res.secure_url);
+          } catch (err) {
+            reject(err);
+          }
+        };
+      });
+      image_url = uploadResult;
     }
 
     await api('/api/messages?action=send', { method: 'POST', body: { conversationId: activeConvId, text, image_url } });
