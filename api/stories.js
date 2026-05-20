@@ -1,6 +1,6 @@
 const { Pool } = require('@neondatabase/serverless');
-const verifyToken = require('./utils/authHelper');
-const RateLimiter = require('./utils/RateLimiter');
+const verifyToken = require('./_utils/authHelper');
+const RateLimiter = require('./_utils/RateLimiter');
 
 const pool = new Pool({ connectionString: process.env.NEON_DATABASE_URL });
 

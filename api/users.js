@@ -1,9 +1,9 @@
 const { Pool } = require('@neondatabase/serverless');
-const verifyToken = require('./utils/authHelper');
-const DatabaseRouter = require('./utils/DatabaseRouter');
-const CacheLayer = require('./utils/CacheLayer');
-const WebSocketManager = require('./utils/WebSocketManager');
-const RateLimiter = require('./utils/RateLimiter');
+const verifyToken = require('./_utils/authHelper');
+const DatabaseRouter = require('./_utils/DatabaseRouter');
+const CacheLayer = require('./_utils/CacheLayer');
+const WebSocketManager = require('./_utils/WebSocketManager');
+const RateLimiter = require('./_utils/RateLimiter');
 
 const pool = new Pool({ connectionString: process.env.NEON_DATABASE_URL });
 

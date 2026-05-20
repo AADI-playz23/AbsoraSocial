@@ -1,6 +1,6 @@
-const verifyToken = require('./utils/authHelper');
-const WebSocketManager = require('./utils/WebSocketManager');
-const RateLimiter = require('./utils/RateLimiter');
+const verifyToken = require('./_utils/authHelper');
+const WebSocketManager = require('./_utils/WebSocketManager');
+const RateLimiter = require('./_utils/RateLimiter');
 
 module.exports = async (req, res) => {
   // CORS Preflight

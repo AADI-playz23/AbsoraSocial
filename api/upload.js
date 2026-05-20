@@ -1,6 +1,6 @@
-const verifyToken = require('./utils/authHelper');
-const ImageRouter = require('./utils/ImageRouter');
-const RateLimiter = require('./utils/RateLimiter');
+const verifyToken = require('./_utils/authHelper');
+const ImageRouter = require('./_utils/ImageRouter');
+const RateLimiter = require('./_utils/RateLimiter');
 
 module.exports = async (req, res) => {
   // CORS Headers

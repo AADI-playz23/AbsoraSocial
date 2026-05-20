@@ -1,6 +1,6 @@
 const { Pool } = require('@neondatabase/serverless');
-const DatabaseRouter = require('./utils/DatabaseRouter');
-const RateLimiter = require('./utils/RateLimiter');
+const DatabaseRouter = require('./_utils/DatabaseRouter');
+const RateLimiter = require('./_utils/RateLimiter');
 
 const pool = new Pool({ connectionString: process.env.NEON_DATABASE_URL });
 
